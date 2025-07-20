@@ -125,7 +125,13 @@ sudo apt install libxcb-xinerama0 libqt5x11extras5
 * Delete (delete current polygon)
 * Ctrl-C,ctrl-v (copy/paste selected polygons)
 
+
+## Preparing labelme data from MD results
+
+See the [md_to_labelme](https://megadetector.readthedocs.io/en/latest/postprocessing.html#module-megadetector.postprocessing.md_to_labelme) module in the [MegaDetector Python package](https://pypi.org/project/megadetector/).
+
+
 ## TODO
 
-* My fine adjustment logic breaks down a little when boxes are near the edge of the canvas (nothing bad happens, fine adjustment just stops working), fix this
+* My fine adjustment logic breaks down a little when boxes are near the edge of the canvas (nothing bad happens, fine adjustment just stops working), fix this.
 
