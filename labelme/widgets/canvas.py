@@ -255,7 +255,7 @@ class Canvas(QtWidgets.QWidget):
                 currentPos = ev.localPos()
             else:
                 currentPos = ev.posF()
-            
+
             delta_x = currentPos.x() - self.panStartPos.x()
             delta_y = currentPos.y() - self.panStartPos.y()
 
@@ -284,17 +284,21 @@ class Canvas(QtWidgets.QWidget):
                     h_bar = scroll_area.horizontalScrollBar()
                     v_bar = scroll_area.verticalScrollBar()
 
-                    # Transform mouse movement using the same logic as transformPos()
-                    # Convert widget coordinate deltas to image coordinate deltas
-                    image_delta_x = total_delta_x / self.scale
-                    image_delta_y = total_delta_y / self.scale
-                    
-                    # Apply qView's approach: modify widget position directly like QGraphicsView::ScrollHandDrag
-                    # This achieves true 1:1 mouse-to-image movement
                     current_pos = self.pos()
                     new_x = int(current_pos.x() + total_delta_x)
                     new_y = int(current_pos.y() + total_delta_y)
                     self.move(new_x, new_y)
+
+                    # Update scroll bars to reflect the new widget position
+                    if h_bar:
+                        scroll_x = max(0, -new_x)  # Convert widget position to scroll position
+                        clamped_scroll_x = max(h_bar.minimum(), min(h_bar.maximum(), scroll_x))
+                        h_bar.setValue(clamped_scroll_x)
+
+                    if v_bar:
+                        scroll_y = max(0, -new_y)  # Convert widget position to scroll position
+                        clamped_scroll_y = max(v_bar.minimum(), min(v_bar.maximum(), scroll_y))
+                        v_bar.setValue(clamped_scroll_y)
 
             # Don't update panStartPos during drag - use total delta from original start
             self.overrideCursor(QtCore.Qt.ClosedHandCursor)
@@ -482,7 +486,7 @@ class Canvas(QtWidgets.QWidget):
                 self.panStartPos = ev.localPos()
             else:
                 self.panStartPos = ev.posF()
-            
+
             # Store initial scroll positions to avoid feedback loops
             widget = self.parent()
             scroll_area = None
@@ -491,11 +495,11 @@ class Canvas(QtWidgets.QWidget):
                     scroll_area = widget
                     break
                 widget = widget.parent()
-            
+
             if scroll_area:
                 self.panStartScrollX = scroll_area.horizontalScrollBar().value()
                 self.panStartScrollY = scroll_area.verticalScrollBar().value()
-            
+
             self.overrideCursor(QtCore.Qt.OpenHandCursor)
             return
 

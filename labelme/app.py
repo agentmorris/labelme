@@ -1828,16 +1828,6 @@ class MainWindow(QtWidgets.QMainWindow):
         old_value = bar.value()
         value = bar.value() + bar.singleStep() * units
         
-        # DEBUG: understand scroll coordinate transformation
-        direction = "H" if orientation == QtCore.Qt.Horizontal else "V"
-        print(f"SCROLL REQUEST DEBUG ({direction}):")
-        print(f"  Input delta: {delta}")
-        print(f"  Units: {units}")
-        print(f"  Bar singleStep: {bar.singleStep()}")
-        print(f"  Old scroll value: {old_value}")
-        print(f"  New scroll value: {value}")
-        print(f"  Actual change: {value - old_value}")
-        print("---")
         
         self.setScroll(orientation, value)
 
@@ -1846,10 +1836,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.scrollBars[orientation].setValue(int(value))
         self.scroll_values[orientation][self.filename] = value
         
-        # DEBUG: Show all scroll bar changes
-        direction = "H" if orientation == QtCore.Qt.Horizontal else "V"
-        change = int(value) - old_value
-        print(f"SCROLLBAR CHANGE ({direction}): old={old_value}, new={int(value)}, change={change}")
 
     def setZoom(self, value):
         self.actions.fitWidth.setChecked(False)
