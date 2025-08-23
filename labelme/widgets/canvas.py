@@ -256,9 +256,27 @@ class Canvas(QtWidgets.QWidget):
             delta_x = currentPos.x() - self.panStartPos.x()
             delta_y = currentPos.y() - self.panStartPos.y()
             
-            # Emit scroll requests to move the canvas
-            self.scrollRequest.emit(-delta_x, QtCore.Qt.Horizontal)
-            self.scrollRequest.emit(-delta_y, QtCore.Qt.Vertical)
+            # Direct 1:1 panning - move the scrollbars by the exact pixel amount
+            # Find the QScrollArea by traversing up the widget hierarchy
+            if delta_x != 0 or delta_y != 0:
+                widget = self.parent()
+                scroll_area = None
+                
+                # Look for QScrollArea in the parent hierarchy
+                while widget:
+                    if hasattr(widget, 'horizontalScrollBar') and hasattr(widget, 'verticalScrollBar'):
+                        scroll_area = widget
+                        break
+                    widget = widget.parent()
+                
+                if scroll_area:
+                    h_bar = scroll_area.horizontalScrollBar()
+                    v_bar = scroll_area.verticalScrollBar()
+                    
+                    if delta_x != 0 and h_bar:
+                        h_bar.setValue(h_bar.value() - delta_x)
+                    if delta_y != 0 and v_bar:
+                        v_bar.setValue(v_bar.value() - delta_y)
             
             self.panStartPos = currentPos
             self.overrideCursor(QtCore.Qt.ClosedHandCursor)
