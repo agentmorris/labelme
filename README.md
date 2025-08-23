@@ -71,6 +71,8 @@ I wanted to add a few UI features specific to the scenario where boxes are prepo
 
 * Alt-right and alt-left to select next/prev boxes (super-useful for the case where multiple overlapping boxes are predicted for a single object, which is a time-consuming situation to resolve with the mouse)
 
+* Middle mouse button pans the image
+
 ## Notes to self about how I set up my environment
 
 ### Setting up this repo
