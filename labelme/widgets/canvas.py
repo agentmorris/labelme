@@ -104,10 +104,12 @@ class Canvas(QtWidgets.QWidget):
         self.setFocusPolicy(QtCore.Qt.WheelFocus)
 
         self._ai_model = None
-        
+
         # Middle mouse button panning state
         self.panning = False
         self.panStartPos = QtCore.QPoint()
+        self.panStartScrollX = 0
+        self.panStartScrollY = 0
 
     def fillDrawing(self):
         return self._fill_drawing
@@ -246,39 +248,55 @@ class Canvas(QtWidgets.QWidget):
         except AttributeError:
             return
 
-        # Handle middle mouse button panning
+        # Handle middle mouse button panning - try direct position modification instead of scroll bars
         if self.panning and ev.buttons() & QtCore.Qt.MiddleButton:
+            # Use raw widget coordinates without transformation
             if QT5:
-                currentPos = ev.pos()
+                currentPos = ev.localPos()
             else:
-                currentPos = ev.posF().toPoint()
+                currentPos = ev.posF()
             
             delta_x = currentPos.x() - self.panStartPos.x()
             delta_y = currentPos.y() - self.panStartPos.y()
-            
+
             # Direct 1:1 panning - move the scrollbars by the exact pixel amount
             # Find the QScrollArea by traversing up the widget hierarchy
             if delta_x != 0 or delta_y != 0:
                 widget = self.parent()
                 scroll_area = None
-                
+
                 # Look for QScrollArea in the parent hierarchy
                 while widget:
                     if hasattr(widget, 'horizontalScrollBar') and hasattr(widget, 'verticalScrollBar'):
                         scroll_area = widget
                         break
                     widget = widget.parent()
-                
+
                 if scroll_area:
                     h_bar = scroll_area.horizontalScrollBar()
                     v_bar = scroll_area.verticalScrollBar()
+
+                    # Calculate total movement from start position to avoid accumulating errors
+                    total_delta_x = currentPos.x() - self.panStartPos.x()
+                    total_delta_y = currentPos.y() - self.panStartPos.y()
+
+                if scroll_area:
+                    h_bar = scroll_area.horizontalScrollBar()
+                    v_bar = scroll_area.verticalScrollBar()
+
+                    # Transform mouse movement using the same logic as transformPos()
+                    # Convert widget coordinate deltas to image coordinate deltas
+                    image_delta_x = total_delta_x / self.scale
+                    image_delta_y = total_delta_y / self.scale
                     
-                    if delta_x != 0 and h_bar:
-                        h_bar.setValue(h_bar.value() - delta_x)
-                    if delta_y != 0 and v_bar:
-                        v_bar.setValue(v_bar.value() - delta_y)
-            
-            self.panStartPos = currentPos
+                    # Apply qView's approach: modify widget position directly like QGraphicsView::ScrollHandDrag
+                    # This achieves true 1:1 mouse-to-image movement
+                    current_pos = self.pos()
+                    new_x = int(current_pos.x() + total_delta_x)
+                    new_y = int(current_pos.y() + total_delta_y)
+                    self.move(new_x, new_y)
+
+            # Don't update panStartPos during drag - use total delta from original start
             self.overrideCursor(QtCore.Qt.ClosedHandCursor)
             return
 
@@ -459,10 +477,25 @@ class Canvas(QtWidgets.QWidget):
         # Handle middle mouse button press for panning
         if ev.button() == QtCore.Qt.MiddleButton:
             self.panning = True
+            # Use raw widget coordinates without transformation
             if QT5:
-                self.panStartPos = ev.pos()
+                self.panStartPos = ev.localPos()
             else:
-                self.panStartPos = ev.posF().toPoint()
+                self.panStartPos = ev.posF()
+            
+            # Store initial scroll positions to avoid feedback loops
+            widget = self.parent()
+            scroll_area = None
+            while widget:
+                if hasattr(widget, 'horizontalScrollBar') and hasattr(widget, 'verticalScrollBar'):
+                    scroll_area = widget
+                    break
+                widget = widget.parent()
+            
+            if scroll_area:
+                self.panStartScrollX = scroll_area.horizontalScrollBar().value()
+                self.panStartScrollY = scroll_area.verticalScrollBar().value()
+            
             self.overrideCursor(QtCore.Qt.OpenHandCursor)
             return
 
@@ -538,13 +571,13 @@ class Canvas(QtWidgets.QWidget):
                     self.removeSelectedPoint()
 
                 group_mode = int(ev.modifiers()) == QtCore.Qt.ControlModifier
-                selected_something = self.selectShapePoint(pos, multiple_selection_mode=group_mode)                
-                
+                selected_something = self.selectShapePoint(pos, multiple_selection_mode=group_mode)
+
                 # If we didn't select anything, and the shift key is pressed, select points in the rectangle
                 # between this point and the previous point
                 select_rectangles_mode = int(ev.modifiers()) == QtCore.Qt.ShiftModifier
-                
-                if (not selected_something) and select_rectangles_mode and (self.prevPoint is not None): 
+
+                if (not selected_something) and select_rectangles_mode and (self.prevPoint is not None):
                     print('Selecting rectangles between {} and {}'.format(self.prevPoint,pos))
                     matching_shapes = []
                     for shape in self.shapes:
@@ -552,7 +585,7 @@ class Canvas(QtWidgets.QWidget):
                             matching_shapes.append(shape)
                     print('Found {} intersecting shapes (of {})'.format(len(matching_shapes),len(self.shapes)))
                     self.selectShapes(matching_shapes)
-                    
+
                 self.prevPoint = pos
                 self.repaint()
             # ...if we're editing
@@ -652,7 +685,7 @@ class Canvas(QtWidgets.QWidget):
 
     def selectShapePoint(self, point, multiple_selection_mode):
         """Select the first shape created which contains this point."""
-        
+
         """
         DSM: returns whether anything was selected, i.e. "False" means "clicked on nothing"
         """
@@ -750,16 +783,16 @@ class Canvas(QtWidgets.QWidget):
             self.hShapeIsSelected = False
             self.update()
 
-    def keepSmallestRectangle(self):    
-        
+    def keepSmallestRectangle(self):
+
         if self.shapes is None:
             return None
         if len(self.shapes) <= 1:
             return None
-        
+
         min_area = None
         min_area_index = None
-        
+
         for i_shape,shape in enumerate(self.shapes):
             if shape.shape_type != 'rectangle':
                 print('Can\'t perform smallest-rect operation with non-rectangle shapes')
@@ -771,30 +804,30 @@ class Canvas(QtWidgets.QWidget):
             if min_area is None or area < min_area:
                 min_area = area
                 min_area_index = i_shape
-        
+
         assert min_area is not None
-        
+
         shapes_to_delete = []
         for i_shape,shape in enumerate(self.shapes):
             if i_shape != min_area_index:
                 shapes_to_delete.append(shape)
-                
+
         assert len(shapes_to_delete) == len(self.shapes) - 1
-                
+
         for shape in shapes_to_delete:
-            self.shapes.remove(shape)            
+            self.shapes.remove(shape)
         self.storeShapes()
         self.selectedShapes = []
         self.update()
-        
+
         return shapes_to_delete
-        
+
     def selectLargestRectangle(self):
         self.selectBySize(largest=True)
-        
+
     def selectSmallestRectangle(self):
         self.selectBySize(largest=False)
-        
+
     def selectBySize(self,largest):
         if self.shapes is None:
             return None
@@ -803,10 +836,10 @@ class Canvas(QtWidgets.QWidget):
             return
         if len(self.shapes) <= 1:
             return None
-        
+
         selected_area = None
         selected_area_index = None
-        
+
         for i_shape,shape in enumerate(self.shapes):
             if shape.shape_type != 'rectangle':
                 print('Can\'t perform largest-rect operation with non-rectangle shapes')
@@ -824,23 +857,23 @@ class Canvas(QtWidgets.QWidget):
                     selected_area_index = i_shape
                 elif (not largest) and area < selected_area:
                     selected_area = area
-                    selected_area_index = i_shape                    
+                    selected_area_index = i_shape
         # ... for each shape
-        
+
         assert selected_area is not None
-        
+
         self.selectShapes([self.shapes[selected_area_index]])
-        
+
     def keepLargestRectangle(self):
-        
+
         if self.shapes is None:
             return None
         if len(self.shapes) <= 1:
             return None
-        
+
         max_area = None
         max_area_index = None
-        
+
         for i_shape,shape in enumerate(self.shapes):
             if shape.shape_type != 'rectangle':
                 print('Can\'t perform largest-rect operation with non-rectangle shapes')
@@ -852,31 +885,31 @@ class Canvas(QtWidgets.QWidget):
             if max_area is None or area > max_area:
                 max_area = area
                 max_area_index = i_shape
-        
+
         assert max_area is not None
-        
+
         shapes_to_delete = []
         for i_shape,shape in enumerate(self.shapes):
             if i_shape != max_area_index:
                 shapes_to_delete.append(shape)
-                
+
         assert len(shapes_to_delete) == len(self.shapes) - 1
-                
+
         for shape in shapes_to_delete:
-            self.shapes.remove(shape)            
+            self.shapes.remove(shape)
         self.storeShapes()
         self.selectedShapes = []
         self.update()
-        
+
         return shapes_to_delete
-    
+
     def mergeAllRectangles(self):
-        
+
         if self.shapes is None:
             return None
         if len(self.shapes) <= 1:
             return None
-        
+
         label = None
         for s in self.shapes:
             if label is None:
@@ -884,12 +917,12 @@ class Canvas(QtWidgets.QWidget):
             elif label != s.label:
                 print('Cannot merge shapes with different labels')
                 return None
-            
+
         min_x = None
         max_x = None
         min_y = None
         max_y = None
-        
+
         for shape in self.shapes:
             for p in shape.points:
                 if min_x is None or p.x() < min_x:
@@ -901,26 +934,26 @@ class Canvas(QtWidgets.QWidget):
                 if max_y is None or p.y() > max_y:
                     max_y = p.y()
         assert min_x is not None and min_y is not None and max_x is not None and max_y is not None
-        
+
         p0 = QtCore.QPointF(min_x,min_y)
         p1 = QtCore.QPointF(max_x,max_y)
-        
+
         deleted_shapes = [s for s in self.shapes]
         for shape in self.shapes:
             self.shapes.remove(shape)
-                
+
         new_shape = Shape(shape_type='rectangle', label=label, flags={})
         new_shape.addPoint(p0)
         new_shape.addPoint(p1)
         self.shapes = [new_shape]
-        
+
         self.storeShapes()
         self.selectedShapes = []
         self.update()
         self.repaint()
-        
+
         return (deleted_shapes,new_shape)
-                
+
     def deleteSelected(self):
         deleted_shapes = []
         if self.selectedShapes:
@@ -934,7 +967,7 @@ class Canvas(QtWidgets.QWidget):
 
     def keepSelected(self):
         deleted_shapes = []
-        kept_shapes = []        
+        kept_shapes = []
         if self.selectedShapes:
             for shape in self.shapes:
                 if shape in self.selectedShapes:
@@ -945,7 +978,7 @@ class Canvas(QtWidgets.QWidget):
             self.selectedShapes = kept_shapes
             self.update()
             for shape in deleted_shapes:
-                self.shapes.remove(shape)                
+                self.shapes.remove(shape)
         return deleted_shapes
 
     def deleteShape(self, shape):
@@ -1229,11 +1262,11 @@ class Canvas(QtWidgets.QWidget):
             self.repaint()
             self.movingShape = True
 
-    def keyPressEvent(self, ev):        
-        
+    def keyPressEvent(self, ev):
+
         modifiers = ev.modifiers()
         key = ev.key()
-        
+
         if self.drawing():
             if key == QtCore.Qt.Key_Escape and self.current:
                 self.current = None
@@ -1243,28 +1276,28 @@ class Canvas(QtWidgets.QWidget):
                 self.finalise()
             elif modifiers == QtCore.Qt.AltModifier:
                 self.snapping = False
-        
+
         # elif self.editing():
-        # 
+        #
         # Move/fine-adjust regardless of whether we're in editing mode
-        
+
         if True:
-            
+
             modifiers = ev.modifiers()
             is_alt_pressed = ev.modifiers() & QtCore.Qt.AltModifier
-            
+
             if is_alt_pressed:
-                
+
                 if (not self.shapes) or len(self.shapes) == 0:
                     return
-                
+
                 current_selection_index = 0
                 if self.selectedShapes and len(self.selectedShapes) > 0:
-                    try:                        
+                    try:
                         current_selection_index = self.shapes.index(self.selectedShapes[0])
                     except Exception:
                         pass
-                
+
                 index_to_select = None
                 if key == QtCore.Qt.Key_Left:
                     index_to_select = current_selection_index - 1
@@ -1278,9 +1311,9 @@ class Canvas(QtWidgets.QWidget):
                     return
                 assert index_to_select is not None
                 self.selectShapes([self.shapes[index_to_select]])
-                
+
             else:
-                
+
                 if key == QtCore.Qt.Key_Up:
                     self.moveByKeyboard(QtCore.QPointF(0.0, -MOVE_SPEED),ev)
                 elif key == QtCore.Qt.Key_Down:
