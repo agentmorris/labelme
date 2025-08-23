@@ -46,7 +46,7 @@ def newAction(
         try:
             val = int(shortcut)
             assert val >= 0 and val <=9, 'Invalid numeric shortcut: {}'.format(shortcut)
-            print('Creating numberic shortcut from {}'.format(shortcut))
+            print('Creating numeric shortcut from {}'.format(shortcut))
             shortcut = QtGui.QKeySequence(val+QtCore.Qt.Key_0)
         except Exception:
             pass

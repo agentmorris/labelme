@@ -104,6 +104,10 @@ class Canvas(QtWidgets.QWidget):
         self.setFocusPolicy(QtCore.Qt.WheelFocus)
 
         self._ai_model = None
+        
+        # Middle mouse button panning state
+        self.panning = False
+        self.panStartPos = QtCore.QPoint()
 
     def fillDrawing(self):
         return self._fill_drawing
@@ -240,6 +244,24 @@ class Canvas(QtWidgets.QWidget):
             else:
                 pos = self.transformPos(ev.posF())
         except AttributeError:
+            return
+
+        # Handle middle mouse button panning
+        if self.panning and ev.buttons() & QtCore.Qt.MiddleButton:
+            if QT5:
+                currentPos = ev.pos()
+            else:
+                currentPos = ev.posF().toPoint()
+            
+            delta_x = currentPos.x() - self.panStartPos.x()
+            delta_y = currentPos.y() - self.panStartPos.y()
+            
+            # Emit scroll requests to move the canvas
+            self.scrollRequest.emit(-delta_x, QtCore.Qt.Horizontal)
+            self.scrollRequest.emit(-delta_y, QtCore.Qt.Vertical)
+            
+            self.panStartPos = currentPos
+            self.overrideCursor(QtCore.Qt.ClosedHandCursor)
             return
 
         self.prevMovePoint = pos
@@ -416,6 +438,16 @@ class Canvas(QtWidgets.QWidget):
 
         is_shift_pressed = ev.modifiers() & QtCore.Qt.ShiftModifier
 
+        # Handle middle mouse button press for panning
+        if ev.button() == QtCore.Qt.MiddleButton:
+            self.panning = True
+            if QT5:
+                self.panStartPos = ev.pos()
+            else:
+                self.panStartPos = ev.posF().toPoint()
+            self.overrideCursor(QtCore.Qt.OpenHandCursor)
+            return
+
         if ev.button() == QtCore.Qt.LeftButton:
             if self.drawing():
                 if self.current:
@@ -518,6 +550,12 @@ class Canvas(QtWidgets.QWidget):
             self.prevPoint = pos
 
     def mouseReleaseEvent(self, ev):
+        # Handle middle mouse button release for panning
+        if ev.button() == QtCore.Qt.MiddleButton:
+            self.panning = False
+            self.restoreCursor()
+            return
+
         if ev.button() == QtCore.Qt.RightButton:
             menu = self.menus[len(self.selectedShapesCopy) > 0]
             self.restoreCursor()
