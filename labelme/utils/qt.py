@@ -100,7 +100,11 @@ def distancetoline(point, line):
         return np.linalg.norm(p3 - p2)
     if np.linalg.norm(p2 - p1) == 0:
         return np.linalg.norm(p3 - p1)
-    return np.linalg.norm(np.cross(p2 - p1, p1 - p3)) / np.linalg.norm(p2 - p1)
+    # np.cross no longer supports 2D vectors in NumPy 2.x; compute the
+    # z-component of the 2D cross product explicitly.
+    d = p2 - p1
+    e = p1 - p3
+    return abs(d[0] * e[1] - d[1] * e[0]) / np.linalg.norm(d)
 
 
 def fmtShortcut(text):
